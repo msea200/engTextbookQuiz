@@ -211,3 +211,88 @@ Communicate A          ← title
 - [ ] speaker="W" 타이틀 → 복습 리스트(retrySet) 추가 안 됨
 - [ ] 일반 타이틀(B/G/A) Phase 1/2/3 동작 무변경 확인
 - [ ] 데모 데이터(`getDemoData()`)에서 쓰기 시험 카드 정상 동작 확인
+- [ ] 마지막 쓰기 시험 카드에 "정답보기" 버튼 표시됨
+- [ ] "정답보기" 진입 시 title별 카드가 순서대로 표시됨
+- [ ] 각 정답보기 카드에 한글(문제)+영어(정답) 쌍이 모두 표시됨
+- [ ] "다음" 버튼으로 다음 title 카드로 이동됨
+- [ ] 마지막 정답보기 카드의 "완료" 버튼 → 초기화면으로 이동됨
+
+---
+
+## 12. 정답보기 기능 (신규)
+
+> 쓰기 시험을 모두 완료한 후, 각 title의 한글 문제와 영어 정답을 함께 검토할 수 있는 흐름을 추가한다.
+
+### 12-1. 마지막 쓰기시험 카드 — "정답보기" 버튼 추가
+
+- `cardSequence` 내 `type === 'writing'` 카드 중 **가장 마지막 인덱스** 카드에 버튼 추가
+- 기존 "완료 ✓" 버튼 **옆에** "정답보기" 버튼 나란히 배치
+- "완료 ✓" 클릭 → 기존 흐름 유지 (`goNext()` → `showReviewList()` or `resetToStart()`)
+- "정답보기" 클릭 → `startAnswerReview()` 호출
+
+> 마지막 쓰기시험 카드 판별:
+> ```js
+> const isLastWritingCard = type === 'writing'
+>   && !cardSequence.slice(cardCursor + 1).some(c => c.type === 'writing');
+> ```
+
+### 12-2. 정답보기 카드 (Answer Review Card)
+
+- 세션에서 진행한 쓰기시험 title 목록을 순서대로, **title당 1개** 카드 생성
+- 각 카드 내용:
+  - 카드 헤더 배지: `✏️ 정답보기`
+  - title 이름
+  - 각 문장을 **한글(문제)** + **영어(정답)** 쌍으로 나열
+
+  ```
+  1. 사라, 걱정돼 보여. 무슨 일이야?
+     → Sarah, you look worried. What's wrong?
+
+  2. 내 강아지가 계속 긁어.
+     → My dog keeps scratching himself.
+  ```
+
+- **"다음 ▶"** 버튼만 활성화 (이전 버튼 없음)
+- 마지막 카드: "다음" 대신 **"완료 ✓"** 표시
+- "완료 ✓" 클릭 → `resetToStart()` (초기화면으로)
+
+### 12-3. 데이터 소스
+
+| 항목 | 출처 |
+|------|------|
+| 한글 문장 (문제) | `allWritingData[currentChapter][title][i]` |
+| 영어 문장 (정답) | `allData[currentChapter][title]`에서 `speaker === 'W'`인 항목의 `lines` |
+
+> `allData[chapter][title]`의 배열 순서 = `allWritingData[chapter][title]`의 순서가 동일하므로 index로 매핑 가능.
+
+### 12-4. 신규 상태 변수
+
+| 변수명 | 타입 | 설명 |
+|--------|------|------|
+| `answerReviewActive` | `boolean` | 정답보기 모드 진행 중 여부 |
+| `answerReviewTitles` | `Array<string>` | 정답보기 대상 title 목록 (세션 내 W 타이틀 순서) |
+| `answerReviewCursor` | `number` | 현재 정답보기 카드 인덱스 |
+
+### 12-5. CSS 추가 요소
+
+| 클래스 | 역할 |
+|--------|------|
+| `.answer-review-header` | `✏️ 정답보기` 배지 |
+| `.answer-review-pair` | 한글+영어 쌍 컨테이너 |
+| `.answer-review-ko` | 한글 문장 (문제) 스타일 |
+| `.answer-review-en` | 영어 문장 (정답) 스타일 |
+
+### 12-6. 신규 함수
+
+| 함수 | 역할 |
+|------|------|
+| `startAnswerReview()` | 정답보기 모드 시작 — `answerReviewTitles` 수집, cursor=0, 카드 렌더 |
+| `renderAnswerReviewCard()` | 현재 `answerReviewCursor` 위치의 정답보기 카드 렌더링 |
+| `goAnswerReviewNext()` | `answerReviewCursor++` 후 다음 카드 렌더 (또는 완료 시 `resetToStart()`) |
+
+### 12-7. 수정 함수
+
+| 함수 | 변경 내용 |
+|------|-----------|
+| `renderCard()` | 쓰기시험 섹션 — `isLastWritingCard` 판별 후 "정답보기" 버튼 조건부 추가 |
+| `resetToStart()` | `answerReviewActive`, `answerReviewTitles`, `answerReviewCursor` 초기화 추가 |

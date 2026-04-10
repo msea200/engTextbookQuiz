@@ -651,6 +651,50 @@
     color: #14532d;
     line-height: 1.6;
   }
+
+  /* ── ANSWER REVIEW CARD ── */
+  .answer-review-header {
+    display: inline-block;
+    background: #fffbeb;
+    color: #d97706;
+    font-size: .75rem;
+    font-weight: 800;
+    padding: 4px 12px;
+    border-radius: 99px;
+    margin-bottom: 10px;
+    letter-spacing: .4px;
+    border: 1.5px solid #fcd34d;
+  }
+  .answer-review-pair {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 18px;
+    background: #fffbeb;
+    border: 2px solid #fcd34d;
+    border-radius: 14px;
+    margin-bottom: 10px;
+  }
+  .answer-review-num {
+    font-size: .8rem;
+    font-weight: 900;
+    color: #d97706;
+  }
+  .answer-review-ko {
+    font-size: .9rem;
+    font-weight: 700;
+    color: #78350f;
+    line-height: 1.55;
+  }
+  .answer-review-en {
+    font-size: .95rem;
+    font-weight: 800;
+    color: #1e40af;
+    line-height: 1.55;
+    padding-top: 6px;
+    border-top: 1.5px solid #fcd34d;
+    margin-top: 2px;
+  }
 </style>
 </head>
 <body>
@@ -742,6 +786,11 @@ let passedByRetry = false;       // was current card advanced by retry check?
 
 // ── WRITING TEST STATE ──
 let allWritingData = {};  // { chapter: { title: [ko, ...] } }
+
+// ── ANSWER REVIEW STATE ──
+let answerReviewActive = false;
+let answerReviewTitles = [];   // 세션 내 W 타이틀 순서 목록
+let answerReviewCursor = 0;
 
 // ═══════════════════════════════════════════════════════
 //  BOOT
@@ -1596,14 +1645,31 @@ function renderCard() {
     });
     card.appendChild(list);
 
-    // 다음 버튼만 (이전·정답확인 없음)
+    // 마지막 쓰기시험 카드: 완료+정답보기 / 그 외: 다음
+    const isLastWritingCard = !cardSequence.slice(cardCursor + 1).some(c => c.type === 'writing');
     const navRow = document.createElement('div');
     navRow.className = 'nav-row';
-    const btnNext = document.createElement('button');
-    btnNext.className = 'btn-nav btn-next';
-    btnNext.textContent = isLast ? '완료 ✓' : '다음 ▶';
-    btnNext.onclick = goNext;
-    navRow.appendChild(btnNext);
+    if (isLastWritingCard) {
+      const btnDone = document.createElement('button');
+      btnDone.className = 'btn-nav btn-next';
+      btnDone.textContent = '완료 ✓';
+      btnDone.onclick = goNext;
+
+      const btnReview = document.createElement('button');
+      btnReview.className = 'btn-nav btn-check';
+      btnReview.textContent = '정답보기';
+      btnReview.style.cssText = 'background:#d97706;box-shadow:0 4px 16px rgba(217,119,6,.3);color:#fff;border:none;';
+      btnReview.onclick = startAnswerReview;
+
+      navRow.appendChild(btnDone);
+      navRow.appendChild(btnReview);
+    } else {
+      const btnNext = document.createElement('button');
+      btnNext.className = 'btn-nav btn-next';
+      btnNext.textContent = '다음 ▶';
+      btnNext.onclick = goNext;
+      navRow.appendChild(btnNext);
+    }
     card.appendChild(navRow);
 
   } else {
@@ -1672,6 +1738,78 @@ function renderCard() {
 }
 
 // ═══════════════════════════════════════════════════════
+//  ANSWER REVIEW
+// ═══════════════════════════════════════════════════════
+function startAnswerReview() {
+  answerReviewTitles = [...new Set(
+    cardSequence.filter(c => c.type === 'writing').map(c => c.title)
+  )];
+  answerReviewCursor = 0;
+  answerReviewActive = true;
+  renderAnswerReviewCard();
+}
+
+function renderAnswerReviewCard() {
+  const total = answerReviewTitles.length;
+  const title = answerReviewTitles[answerReviewCursor];
+  const isLast = answerReviewCursor === total - 1;
+
+  const koList = allWritingData[currentChapter][title];
+  const enList = (allData[currentChapter][title] || [])
+    .filter(d => d.speaker === 'W')
+    .map(d => d.lines);
+
+  const pct = Math.round(((answerReviewCursor + 1) / total) * 100);
+  document.getElementById('progressLabel').textContent =
+    `✏️ 정답보기 — ${title} (${answerReviewCursor + 1}/${total})`;
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressFill').style.width = pct + '%';
+
+  const area = document.getElementById('cardArea');
+  area.innerHTML = '';
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="answer-review-header">✏️ 정답보기</div>
+    <div class="card-title">${title}</div>
+    <div class="card-phase">정답보기 (${answerReviewCursor + 1}/${total})</div>
+  `;
+
+  koList.forEach((ko, i) => {
+    const pair = document.createElement('div');
+    pair.className = 'answer-review-pair';
+    pair.innerHTML = `
+      <div class="answer-review-num">${i + 1}.</div>
+      <div class="answer-review-ko">${ko}</div>
+      <div class="answer-review-en">→ ${enList[i] || ''}</div>
+    `;
+    card.appendChild(pair);
+  });
+
+  const navRow = document.createElement('div');
+  navRow.className = 'nav-row';
+  const btnNext = document.createElement('button');
+  btnNext.className = 'btn-nav btn-next';
+  btnNext.textContent = isLast ? '완료 ✓' : '다음 ▶';
+  btnNext.onclick = goAnswerReviewNext;
+  navRow.appendChild(btnNext);
+  card.appendChild(navRow);
+
+  area.appendChild(card);
+}
+
+function goAnswerReviewNext() {
+  answerReviewCursor++;
+  if (answerReviewCursor >= answerReviewTitles.length) {
+    answerReviewActive = false;
+    resetToStart();
+  } else {
+    renderAnswerReviewCard();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 //  FINAL REVIEW
 // ═══════════════════════════════════════════════════════
 function showFinalReview() {
@@ -1732,6 +1870,10 @@ function resetToStart() {
   studyMode = 'all';
   offlineMode = false;
 
+  // Answer Review 초기화
+  answerReviewActive = false;
+  answerReviewTitles = [];
+  answerReviewCursor = 0;
 
   // Hide all screens
   document.getElementById('cardArea').style.display = 'none';

@@ -540,3 +540,233 @@ startChapter()
 | `goNext()` / `goPrev()` | 기존 내비게이션 그대로 |
 
 > `showReviewList()`가 건드려지지 않아도 되는 이유: W 타이틀은 `buildCardSequence()`에 포함되지 않으므로 `titleStats`에 등록되지 않고, retrySet에도 추가될 수 없음.
+
+---
+
+## 9. 정답보기 기능 설계 (신규)
+
+> Plan §12 참조. 쓰기 시험 완료 후 title별로 한글(문제)+영어(정답) 쌍을 검토하는 카드 흐름.
+
+### 9-1. CSS 추가 (`</style>` 직전)
+
+```css
+/* ── ANSWER REVIEW CARD ── */
+.answer-review-header {
+  display: inline-block;
+  background: #fffbeb;
+  color: #d97706;
+  font-size: .75rem;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 99px;
+  margin-bottom: 10px;
+  letter-spacing: .4px;
+  border: 1.5px solid #fcd34d;
+}
+.answer-review-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 18px;
+  background: #fffbeb;
+  border: 2px solid #fcd34d;
+  border-radius: 14px;
+  margin-bottom: 10px;
+}
+.answer-review-num {
+  font-size: .8rem;
+  font-weight: 900;
+  color: #d97706;
+}
+.answer-review-ko {
+  font-size: .9rem;
+  font-weight: 700;
+  color: #78350f;
+  line-height: 1.55;
+}
+.answer-review-en {
+  font-size: .95rem;
+  font-weight: 800;
+  color: #1e40af;
+  line-height: 1.55;
+  padding-top: 6px;
+  border-top: 1.5px solid #fcd34d;
+  margin-top: 2px;
+}
+```
+
+### 9-2. JS — 신규 상태 변수 (STATE 섹션 하단에 추가)
+
+```js
+// ── ANSWER REVIEW STATE ──
+let answerReviewActive = false;
+let answerReviewTitles = [];   // 세션 내 W 타이틀 순서 목록
+let answerReviewCursor = 0;
+```
+
+### 9-3. `renderCard()` 수정 — 쓰기시험 카드 navRow 교체
+
+**현재 코드 위치**: `if (type === 'writing')` 블록 내 navRow 생성 부분
+
+`isLastWritingCard` 판별을 추가하고 navRow를 조건 분기:
+
+```js
+// 마지막 쓰기시험 카드 판별
+const isLastWritingCard = !cardSequence.slice(cardCursor + 1).some(c => c.type === 'writing');
+
+const navRow = document.createElement('div');
+navRow.className = 'nav-row';
+
+if (isLastWritingCard) {
+  const btnDone = document.createElement('button');
+  btnDone.className = 'btn-nav btn-next';
+  btnDone.textContent = '완료 ✓';
+  btnDone.onclick = goNext;
+
+  const btnReview = document.createElement('button');
+  btnReview.className = 'btn-nav btn-check';
+  btnReview.textContent = '정답보기';
+  btnReview.style.cssText = 'background:#d97706;box-shadow:0 4px 16px rgba(217,119,6,.3);color:#fff;border:none;';
+  btnReview.onclick = startAnswerReview;
+
+  navRow.appendChild(btnDone);
+  navRow.appendChild(btnReview);
+} else {
+  const btnNext = document.createElement('button');
+  btnNext.className = 'btn-nav btn-next';
+  btnNext.textContent = '다음 ▶';
+  btnNext.onclick = goNext;
+  navRow.appendChild(btnNext);
+}
+card.appendChild(navRow);
+```
+
+> 기존 `btnNext.textContent = isLast ? '완료 ✓' : '다음 ▶'` 단일 버튼 코드를 위 블록으로 교체.
+
+### 9-4. 신규 함수 `startAnswerReview()`
+
+```js
+function startAnswerReview() {
+  // cardSequence에서 W 타이틀 순서대로 수집 (중복 제거)
+  answerReviewTitles = [...new Set(
+    cardSequence.filter(c => c.type === 'writing').map(c => c.title)
+  )];
+  answerReviewCursor = 0;
+  answerReviewActive = true;
+  renderAnswerReviewCard();
+}
+```
+
+### 9-5. 신규 함수 `renderAnswerReviewCard()`
+
+```js
+function renderAnswerReviewCard() {
+  const total = answerReviewTitles.length;
+  const title = answerReviewTitles[answerReviewCursor];
+  const isLast = answerReviewCursor === total - 1;
+
+  const koList = allWritingData[currentChapter][title];
+  // allData에서 speaker='W'인 항목의 lines (ko 배열과 동일 순서)
+  const enList = (allData[currentChapter][title] || [])
+    .filter(d => d.speaker === 'W')
+    .map(d => d.lines);
+
+  // 진행률 업데이트
+  const pct = Math.round(((answerReviewCursor + 1) / total) * 100);
+  document.getElementById('progressLabel').textContent =
+    `✏️ 정답보기 — ${title} (${answerReviewCursor + 1}/${total})`;
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressFill').style.width = pct + '%';
+
+  const area = document.getElementById('cardArea');
+  area.innerHTML = '';
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="answer-review-header">✏️ 정답보기</div>
+    <div class="card-title">${title}</div>
+    <div class="card-phase">정답보기 (${answerReviewCursor + 1}/${total})</div>
+  `;
+
+  koList.forEach((ko, i) => {
+    const pair = document.createElement('div');
+    pair.className = 'answer-review-pair';
+    pair.innerHTML = `
+      <div class="answer-review-num">${i + 1}.</div>
+      <div class="answer-review-ko">${ko}</div>
+      <div class="answer-review-en">→ ${enList[i] || ''}</div>
+    `;
+    card.appendChild(pair);
+  });
+
+  const navRow = document.createElement('div');
+  navRow.className = 'nav-row';
+  const btnNext = document.createElement('button');
+  btnNext.className = 'btn-nav btn-next';
+  btnNext.textContent = isLast ? '완료 ✓' : '다음 ▶';
+  btnNext.onclick = goAnswerReviewNext;
+  navRow.appendChild(btnNext);
+  card.appendChild(navRow);
+
+  area.appendChild(card);
+}
+```
+
+### 9-6. 신규 함수 `goAnswerReviewNext()`
+
+```js
+function goAnswerReviewNext() {
+  answerReviewCursor++;
+  if (answerReviewCursor >= answerReviewTitles.length) {
+    answerReviewActive = false;
+    resetToStart();
+  } else {
+    renderAnswerReviewCard();
+  }
+}
+```
+
+### 9-7. `resetToStart()` 수정 — 정답보기 상태 초기화 추가
+
+기존 상태 초기화 블록 끝에 추가:
+
+```js
+// Answer Review 초기화
+answerReviewActive = false;
+answerReviewTitles = [];
+answerReviewCursor = 0;
+```
+
+---
+
+## 10. 정답보기 구현 순서 (Do Phase 체크리스트 추가)
+
+| 순서 | 파일 | 작업 |
+|------|------|------|
+| 20 | `index.html` CSS | `.answer-review-*` 스타일 4종 추가 |
+| 21 | `index.html` JS | 상태 변수 3개 추가 (`answerReviewActive` 등) |
+| 22 | `index.html` JS | `renderCard()` — 쓰기시험 navRow를 `isLastWritingCard` 분기로 교체 |
+| 23 | `index.html` JS | `startAnswerReview()` 신규 |
+| 24 | `index.html` JS | `renderAnswerReviewCard()` 신규 |
+| 25 | `index.html` JS | `goAnswerReviewNext()` 신규 |
+| 26 | `index.html` JS | `resetToStart()` — 상태 초기화 3개 추가 |
+
+---
+
+## 11. 흐름 다이어그램 (정답보기 포함)
+
+```
+renderCard() — writing card
+    │
+    ├── isLastWritingCard = false
+    │       └─► [다음 ▶] → goNext() → renderCard()
+    │
+    └── isLastWritingCard = true
+            ├─► [완료 ✓] → goNext() → showReviewList() / resetToStart()
+            └─► [정답보기] → startAnswerReview()
+                                │
+                                └─► renderAnswerReviewCard()
+                                        │ (goAnswerReviewNext × n)
+                                        └─► resetToStart()  ← 마지막 완료
+```
