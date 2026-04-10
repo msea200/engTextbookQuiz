@@ -5,7 +5,7 @@ const SHEET_NAME = 'conversation';
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('English Dialogue Memorization App')
+    .setTitle('English Dialogue Memorization App v2')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');  // ← 핵심;
 }
