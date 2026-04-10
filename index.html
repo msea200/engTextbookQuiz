@@ -609,6 +609,48 @@
     pointer-events: none;
     z-index: 5;
   }
+
+  /* ── WRITING TEST CARD ── */
+  .writing-card-header {
+    display: inline-block;
+    background: #f0fdf4;
+    color: #16a34a;
+    font-size: .75rem;
+    font-weight: 800;
+    padding: 4px 12px;
+    border-radius: 99px;
+    margin-bottom: 10px;
+    letter-spacing: .4px;
+    border: 1.5px solid #86efac;
+  }
+  .writing-ko-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .writing-ko-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 18px;
+    background: #f0fdf4;
+    border: 2px solid #86efac;
+    border-radius: 14px;
+  }
+  .writing-ko-num {
+    font-size: .85rem;
+    font-weight: 900;
+    color: #16a34a;
+    min-width: 22px;
+    flex-shrink: 0;
+  }
+  .writing-ko-text {
+    font-size: .95rem;
+    font-weight: 700;
+    color: #14532d;
+    line-height: 1.6;
+  }
 </style>
 </head>
 <body>
@@ -698,6 +740,9 @@ let matchSelected = null;        // left item index selected
 let matchPairs = {};             // { rightIdx: leftIdx }  filled slots
 let passedByRetry = false;       // was current card advanced by retry check?
 
+// ── WRITING TEST STATE ──
+let allWritingData = {};  // { chapter: { title: [ko, ...] } }
+
 // ═══════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════
@@ -717,6 +762,7 @@ function onDataLoaded(result) {
   const data = result.success ? result.data : result;
   allData = data;
   allTitleOrder = result.titleOrder || {};
+  allWritingData = result.writingData || {};
   const dd = document.getElementById('chapterDropdown');
   Object.keys(data).sort().forEach(ch => {
     const opt = document.createElement('option');
@@ -820,6 +866,7 @@ function syncOfflineCheckVisibility() {
   }
 }
 
+
 // ═══════════════════════════════════════════════════════
 //  DEMO DATA (fallback)
 // ═══════════════════════════════════════════════════════
@@ -855,13 +902,29 @@ function getDemoData() {
       {speaker:"A", lines:"I'm so nervous.", exceptions:""},
       {speaker:"B", lines:"You should take a deep breath. I hope you feel calmer soon.", exceptions:""},
       {speaker:"A", lines:"Okay, I will. Thanks.", exceptions:""}
+    ],
+    "Write it!": [
+      {speaker:"W", lines:"Sarah, you look worried. What's wrong?", exceptions:"Sarah,", ko:"사라, 걱정돼 보여. 무슨 일이야?"},
+      {speaker:"W", lines:"My dog keeps scratching himself.", exceptions:"", ko:"내 강아지가 계속 긁어."},
+      {speaker:"W", lines:"Oh, I'm sorry to hear that. Is it serious?", exceptions:"Oh,", ko:"오, 안됐다. 심각해?"},
+      {speaker:"W", lines:"I think so. He won't stop. What should I do?", exceptions:"", ko:"그런 것 같아. 멈추질 않아. 어떻게 해야 할까?"}
     ]
   }};
   return {
     success: true,
     data: data,
     titleOrder: {
-      "CH1": ["Comunicate A","Comunicate B","Comunicate C","Talk to Play"]
+      "CH1": ["Comunicate A","Comunicate B","Comunicate C","Talk to Play","Write it!"]
+    },
+    writingData: {
+      "CH1": {
+        "Write it!": [
+          "사라, 걱정돼 보여. 무슨 일이야?",
+          "내 강아지가 계속 긁어.",
+          "오, 안됐다. 심각해?",
+          "그런 것 같아. 멈추질 않아. 어떻게 해야 할까?"
+        ]
+      }
     }
   };
 }
@@ -884,15 +947,20 @@ function startChapter() {
   titles = allOrderedTitles.filter(t => checkedSet.has(t));
   if (!titles.length) return;
 
+  // W 타이틀은 쓰기 시험 카드로, 일반 타이틀만 stats 등록
   titleStats = {};
-  titles.forEach(t => { titleStats[t] = { attempts: 0, passed: false, retryPassed: false }; });
+  titles.forEach(t => {
+    if (!(allWritingData[currentChapter]?.[t]?.length > 0)) {
+      titleStats[t] = { attempts: 0, passed: false, retryPassed: false };
+    }
+  });
 
   retrySet.clear();
   retryMode = false;
 
   studyMode = document.getElementById("modeDropdown")?.value || "all";
   offlineMode = studyMode === "filling" && !!(document.getElementById("offlineCheck")?.checked);
-  buildCardSequence(titles);
+  buildCardSequence(titles);  // W 포함 전체 (buildCardSequence 내에서 자동 분기)
   cardCursor = 0;
 
   document.getElementById('chapterSelectScreen').style.display = 'none';
@@ -909,9 +977,15 @@ function buildCardSequence(titleList) {
   else if (studyMode === 'filling') phases = [2, 3];
   else phases = [1, 2, 3];
   titleList.forEach(title => {
-    phases.forEach(phase => {
-      cardSequence.push({ title, phase });
-    });
+    if (allWritingData[currentChapter]?.[title]?.length > 0) {
+      // W 타이틀: 쓰기 시험 카드 1개
+      cardSequence.push({ title, type: 'writing' });
+    } else {
+      // 일반 타이틀: Phase 카드
+      phases.forEach(phase => {
+        cardSequence.push({ title, phase });
+      });
+    }
   });
 }
 
@@ -922,7 +996,12 @@ function updateProgress() {
   const total = cardSequence.length;
   const pct = total ? Math.round((cardCursor / total) * 100) : 0;
   const card = cardSequence[cardCursor];
-  const label = card ? `${card.title} — Phase ${card.phase}/3` : '완료';
+  let label = '완료';
+  if (card) {
+    label = card.type === 'writing'
+      ? `${card.title} — ✏️ 쓰기 시험`
+      : `${card.title} — Phase ${card.phase}/3`;
+  }
   document.getElementById('progressLabel').textContent = label;
   document.getElementById('progressPct').textContent = pct + '%';
   document.getElementById('progressFill').style.width = pct + '%';
@@ -1371,6 +1450,12 @@ function showReviewList() {
   document.getElementById('cardArea').style.display = 'none';
   document.getElementById('progressArea').style.display = 'none';
 
+  // W 타이틀만 있었던 경우 (일반 타이틀 없음) → 초기화면으로
+  if (Object.keys(titleStats).length === 0) {
+    resetToStart();
+    return;
+  }
+
   if (offlineMode) {
     resetToStart();
     return;
@@ -1481,8 +1566,8 @@ function renderCard() {
   }
 
   updateProgress();
-  const { title, phase } = cardSequence[cardCursor];
-  const dialogues = allData[currentChapter][title];
+  const { title, phase, type } = cardSequence[cardCursor];
+  const isLast = cardCursor === cardSequence.length - 1;
 
   const area = document.getElementById('cardArea');
   area.innerHTML = '';
@@ -1490,65 +1575,96 @@ function renderCard() {
   const card = document.createElement('div');
   card.className = 'card';
 
-  card.innerHTML = `
-    <div class="card-badge">${currentChapter}</div>
-    <div class="card-title">${title}</div>
-    <div class="card-phase">${phaseLabel(phase)}</div>
-  `;
+  if (type === 'writing') {
+    // ── 쓰기 시험 카드 ──
+    const koList = allWritingData[currentChapter][title];
+    card.innerHTML = `
+      <div class="writing-card-header">✏️ 쓰기 시험</div>
+      <div class="card-title">${title}</div>
+      <div class="card-phase">한글을 보고 영어 문장을 써보세요</div>
+    `;
+    const list = document.createElement('div');
+    list.className = 'writing-ko-list';
+    koList.forEach((ko, i) => {
+      const item = document.createElement('div');
+      item.className = 'writing-ko-item';
+      item.innerHTML = `
+        <span class="writing-ko-num">${i + 1}.</span>
+        <span class="writing-ko-text">${ko}</span>
+      `;
+      list.appendChild(item);
+    });
+    card.appendChild(list);
 
-  if (phase === 1) buildPhase1(card, dialogues);
-  else buildPhase23(card, dialogues, phase);
+    // 다음 버튼만 (이전·정답확인 없음)
+    const navRow = document.createElement('div');
+    navRow.className = 'nav-row';
+    const btnNext = document.createElement('button');
+    btnNext.className = 'btn-nav btn-next';
+    btnNext.textContent = isLast ? '완료 ✓' : '다음 ▶';
+    btnNext.onclick = goNext;
+    navRow.appendChild(btnNext);
+    card.appendChild(navRow);
 
-  const retryRow = document.createElement('div');
-  retryRow.className = 'retry-row';
-  retryRow.id = 'retryRow';
-  retryRow.style.display = 'none';
-  retryRow.innerHTML = `<input type="checkbox" id="retryCheck"><label for="retryCheck">⚠️ 다시 시도 필요 (다음으로 진행)</label>`;
-  card.appendChild(retryRow);
-
-  const retryCheckEl = retryRow.querySelector('#retryCheck');
-  retryCheckEl.addEventListener('change', onRetryCheck);
-
-  const navRow = document.createElement('div');
-  navRow.className = 'nav-row';
-
-  const btnPrev = document.createElement('button');
-  btnPrev.className = 'btn-nav btn-prev';
-  btnPrev.textContent = '◀ 이전';
-  btnPrev.id = 'btnPrev';
-
-  // Disable prev if offline, at start, or previous was advanced by retry
-  let prevDisabled = offlineMode || cardCursor === 0;
-  if (!prevDisabled && cardCursor > 0) {
-    prevDisabled = !!cardSequence[cardCursor - 1]._advancedByRetry;
-  }
-  btnPrev.disabled = prevDisabled;
-  btnPrev.onclick = goPrev;
-
-  const btnCheck = document.createElement('button');
-  btnCheck.className = 'btn-nav btn-check';
-  btnCheck.textContent = '정답 확인';
-  btnCheck.id = 'btnCheck';
-  if (offlineMode) {
-    btnCheck.disabled = true;
-    btnCheck.style.opacity = '0.35';
-    btnCheck.style.cursor = 'not-allowed';
   } else {
-    btnCheck.onclick = () => checkAnswer(phase, dialogues);
+    // ── 일반 카드 (Phase 1/2/3) ──
+    const dialogues = allData[currentChapter][title];
+    card.innerHTML = `
+      <div class="card-badge">${currentChapter}</div>
+      <div class="card-title">${title}</div>
+      <div class="card-phase">${phaseLabel(phase)}</div>
+    `;
+
+    if (phase === 1) buildPhase1(card, dialogues);
+    else buildPhase23(card, dialogues, phase);
+
+    const retryRow = document.createElement('div');
+    retryRow.className = 'retry-row';
+    retryRow.id = 'retryRow';
+    retryRow.style.display = 'none';
+    retryRow.innerHTML = `<input type="checkbox" id="retryCheck"><label for="retryCheck">⚠️ 다시 시도 필요 (다음으로 진행)</label>`;
+    card.appendChild(retryRow);
+    retryRow.querySelector('#retryCheck').addEventListener('change', onRetryCheck);
+
+    const navRow = document.createElement('div');
+    navRow.className = 'nav-row';
+
+    const btnPrev = document.createElement('button');
+    btnPrev.className = 'btn-nav btn-prev';
+    btnPrev.textContent = '◀ 이전';
+    btnPrev.id = 'btnPrev';
+    let prevDisabled = offlineMode || cardCursor === 0;
+    if (!prevDisabled && cardCursor > 0) {
+      prevDisabled = !!cardSequence[cardCursor - 1]._advancedByRetry
+                  || cardSequence[cardCursor - 1].type === 'writing';
+    }
+    btnPrev.disabled = prevDisabled;
+    btnPrev.onclick = goPrev;
+
+    const btnCheck = document.createElement('button');
+    btnCheck.className = 'btn-nav btn-check';
+    btnCheck.textContent = '정답 확인';
+    btnCheck.id = 'btnCheck';
+    if (offlineMode) {
+      btnCheck.disabled = true;
+      btnCheck.style.opacity = '0.35';
+      btnCheck.style.cursor = 'not-allowed';
+    } else {
+      btnCheck.onclick = () => checkAnswer(phase, dialogues);
+    }
+
+    const btnNext = document.createElement('button');
+    btnNext.className = 'btn-nav btn-next';
+    btnNext.textContent = isLast ? '완료 ✓' : '다음 ▶';
+    btnNext.id = 'btnNext';
+    btnNext.disabled = offlineMode ? false : true;
+    btnNext.onclick = goNext;
+
+    navRow.appendChild(btnPrev);
+    navRow.appendChild(btnCheck);
+    navRow.appendChild(btnNext);
+    card.appendChild(navRow);
   }
-
-  const isLast = cardCursor === cardSequence.length - 1;
-  const btnNext = document.createElement('button');
-  btnNext.className = 'btn-nav btn-next';
-  btnNext.textContent = isLast ? '완료 ✓' : '다음 ▶';
-  btnNext.id = 'btnNext';
-  btnNext.disabled = offlineMode ? false : true;
-  btnNext.onclick = goNext;
-
-  navRow.appendChild(btnPrev);
-  navRow.appendChild(btnCheck);
-  navRow.appendChild(btnNext);
-  card.appendChild(navRow);
 
   area.appendChild(card);
 
@@ -1577,7 +1693,8 @@ function showFinalReview() {
   `;
 
   const grid = screen.querySelector('#statsGrid');
-  titles.forEach(title => {
+  // W 타이틀 제외된 일반 타이틀만 통계 표시
+  Object.keys(titleStats).forEach(title => {
     const stat = titleStats[title] || { attempts: 0 };
     const tries = stat.attempts;
     const cls = tries <= 1 ? 'perfect' : tries <= 3 ? '' : 'struggled';
@@ -1592,6 +1709,7 @@ function showFinalReview() {
     `;
     grid.appendChild(card);
   });
+
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1613,6 +1731,7 @@ function resetToStart() {
   passedByRetry = false;
   studyMode = 'all';
   offlineMode = false;
+
 
   // Hide all screens
   document.getElementById('cardArea').style.display = 'none';

@@ -1,0 +1,10 @@
+{
+  "sessionCount": 2,
+  "lastSession": {
+    "startedAt": "2026-04-10T10:24:28.802Z",
+    "platform": "claude",
+    "level": "Starter"
+  },
+  "currentFeature": "writing-test-mode",
+  "phase": "do"
+}

@@ -1,0 +1,48 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-04-10T12:49:43.250Z",
+  "activeFeatures": [
+    "writing-test-mode",
+    "forder-engTextbookQuiz"
+  ],
+  "primaryFeature": "writing-test-mode",
+  "features": {
+    "writing-test-mode": {
+      "phase": "design",
+      "startedAt": "2026-04-10T10:35:00.000Z",
+      "planPath": "docs/01-plan/features/writing-test-mode.plan.md",
+      "designPath": "docs/02-design/features/writing-test-mode.design.md"
+    },
+    "forder-engTextbookQuiz": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-10T12:49:43.250Z",
+        "lastUpdated": "2026-04-10T12:49:43.250Z"
+      },
+      "lastFile": "c:\\_projects\\forder-engTextbookQuiz\\Code.js"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-04-10T10:24:28.799Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-04-10T12:49:43.250Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-04-10T12:49:43.250Z",
+      "feature": "forder-engTextbookQuiz",
+      "phase": "do",
+      "action": "updated"
+    }
+  ]
+}

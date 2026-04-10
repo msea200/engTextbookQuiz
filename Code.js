@@ -15,23 +15,25 @@ function getConversationData() {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = ss.getSheetByName(SHEET_NAME);
     const data = sheet.getDataRange().getValues();
-    
-    const headers = data[0]; // chapter, title, speaker, lines, exceptions
+
+    const headers = data[0]; // chapter, title, speaker, lines, exceptions, ko
     const rows = data.slice(1);
-    
+
     // Group by chapter > title, preserving insertion order
     const chapters = {};
     const chapterTitleOrder = {}; // { chapter: [title, ...] } in sheet order
-    
+    const writingData = {};        // { chapter: { title: [ko, ...] } }
+
     rows.forEach(row => {
-      const chapter = row[0];
-      const title = row[1];
-      const speaker = row[2];
-      const lines = row[3];
+      const chapter    = row[0];
+      const title      = row[1];
+      const speaker    = row[2];
+      const lines      = row[3];
       const exceptions = row[4] || '';
-      
+      const ko         = row[5] || '';  // 한글 해석
+
       if (!chapter || !title || !lines) return;
-      
+
       if (!chapters[chapter]) {
         chapters[chapter] = {};
         chapterTitleOrder[chapter] = [];
@@ -40,15 +42,23 @@ function getConversationData() {
         chapters[chapter][title] = [];
         chapterTitleOrder[chapter].push(title);
       }
-      
+
       chapters[chapter][title].push({
         speaker: speaker,
         lines: lines,
-        exceptions: exceptions
+        exceptions: exceptions,
+        ko: ko
       });
+
+      // 쓰기 시험 대상: speaker="W" + ko 존재
+      if (speaker === 'W' && ko) {
+        if (!writingData[chapter]) writingData[chapter] = {};
+        if (!writingData[chapter][title]) writingData[chapter][title] = [];
+        writingData[chapter][title].push(ko);
+      }
     });
-    
-    return { success: true, data: chapters, titleOrder: chapterTitleOrder };
+
+    return { success: true, data: chapters, titleOrder: chapterTitleOrder, writingData: writingData };
   } catch (e) {
     return { success: false, error: e.toString() };
   }
