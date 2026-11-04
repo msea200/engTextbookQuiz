@@ -5,7 +5,7 @@ const SHEET_NAME = 'conversation';
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('English Dialogue Memorization App v2')
+    .setTitle('English Dialogue Memorization App v2.1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');  // ← 핵심;
 }
@@ -59,6 +59,31 @@ function getConversationData() {
     });
 
     return { success: true, data: chapters, titleOrder: chapterTitleOrder, writingData: writingData };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// ── APP SETTINGS (스크립트 속성) ──
+const SETTING_KEYS = ['offlineWritingMode', 'convWritingMode'];
+
+function getAppSettings() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const settings = {};
+    SETTING_KEYS.forEach(k => { settings[k] = props.getProperty(k) === '1' ? '1' : '0'; });
+    return { success: true, settings: settings };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+function saveAppSettings(input) {
+  try {
+    const toSave = {};
+    SETTING_KEYS.forEach(k => { toSave[k] = (input && String(input[k]) === '1') ? '1' : '0'; });
+    PropertiesService.getScriptProperties().setProperties(toSave, false); // 다른 속성 유지
+    return { success: true, settings: toSave };
   } catch (e) {
     return { success: false, error: e.toString() };
   }

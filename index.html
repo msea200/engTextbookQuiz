@@ -144,25 +144,115 @@
     border-radius: 13px;
   }
   .offline-check-wrap.show { display: flex; }
-  .offline-check-wrap input[type=checkbox] {
-    width: 18px; height: 18px;
-    accent-color: #e6a800;
-    flex-shrink: 0;
-    cursor: pointer;
-  }
-  .offline-check-wrap label {
+  .mode-indicator {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     font-size: .88rem;
     font-weight: 800;
     color: #7a5800;
-    cursor: pointer;
     line-height: 1.4;
   }
-  .offline-check-wrap label small {
+  .mode-indicator small {
     display: block;
     font-weight: 600;
     font-size: .78rem;
     color: #a07820;
     margin-top: 2px;
+  }
+
+  /* ── SETTINGS BUTTON / MODAL ── */
+  .btn-settings {
+    margin-left: auto;
+    padding: 8px 14px;
+    font-family: 'Nunito', sans-serif;
+    font-size: .85rem;
+    font-weight: 800;
+    color: var(--primary);
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color .2s;
+  }
+  .btn-settings:hover { border-color: var(--primary); }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(26,26,46,.45);
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    width: 100%;
+    max-width: 400px;
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 1.1rem;
+    font-weight: 900;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    color: var(--text-soft);
+  }
+  .setting-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border: 2px solid var(--border);
+    border-radius: 13px;
+    font-size: .9rem;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .setting-item input {
+    width: 18px; height: 18px;
+    margin-top: 2px;
+    accent-color: var(--primary);
+    flex-shrink: 0;
+  }
+  .setting-item small {
+    display: block;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--text-soft);
+    margin-top: 2px;
+  }
+  .settings-msg { min-height: 1.1em; font-size: .82rem; font-weight: 700; color: var(--text-soft); }
+  .settings-msg.error { color: var(--accent); }
+
+  /* ── CONV WRITING MODE (Phase 3 대사 숨김) ── */
+  .dialogue-blank {
+    flex: 1;
+    min-height: 1.6em;
+    border-bottom: 2px dashed var(--border);
+  }
+  .conv-hint {
+    margin: 4px 0 10px;
+    padding: 10px 12px;
+    background: var(--primary-light);
+    border-radius: 12px;
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--primary);
   }
 
   .btn-start {
@@ -701,7 +791,30 @@
 
 <header class="app-header">
   <div class="app-logo">Dialogue<span>Go!</span></div>
+  <button class="btn-settings" id="btnSettings" onclick="openSettings()">⚙️ 환경설정</button>
 </header>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-backdrop" id="settingsModal" onclick="if (event.target === this) closeSettings()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-header">
+      <span id="settingsTitle">⚙️ 환경설정</span>
+      <button class="modal-close" onclick="closeSettings()" aria-label="닫기">✕</button>
+    </div>
+    <label class="setting-item">
+      <input type="checkbox" id="setOffline">
+      <span>🖊️ 오프라인 쓰기모드
+        <small>대화채우기만: 정답 확인 없이 다음으로 진행 · 복습 생략</small></span>
+    </label>
+    <label class="setting-item">
+      <input type="checkbox" id="setConv">
+      <span>👤 한 화자만 보기
+        <small>다른 화자의 대사 쓰기에서 대사를 모두 숨김 (부정행위 방지)</small></span>
+    </label>
+    <div class="settings-msg" id="settingsMsg"></div>
+    <button class="btn-start" id="btnSaveSettings" onclick="saveSettings()">설정 저장</button>
+  </div>
+</div>
 
 <!-- CHAPTER SELECT -->
 <div id="chapterSelectScreen">
@@ -729,13 +842,9 @@
       <option value="filling">대화채우기만</option>
     </select>
   </div>
-  <!-- OFFLINE MODE -->
+  <!-- MODE INDICATOR (설정창에서만 변경 가능) -->
   <div class="offline-check-wrap" id="offlineCheckWrap">
-    <input type="checkbox" id="offlineCheck">
-    <label for="offlineCheck">
-      🖊️ 오프라인 쓰기모드
-      <small>정답 확인 없이 다음으로 진행 · 복습 생략</small>
-    </label>
+    <div class="mode-indicator" id="modeIndicator"></div>
   </div>
   <button class="btn-start" id="btnStart" disabled onclick="startChapter()">학습 시작 ▶</button>
 </div>
@@ -774,6 +883,10 @@ let cardCursor = 0;        // index into cardSequence
 
 let studyMode = "all";     // "all" | "matching" | "filling"
 let offlineMode = false;   // skip answer check, no review
+let convMode = false;      // 세션 고정: Phase 3 대사 숨김 적용 여부
+
+// ── APP SETTINGS (스크립트 속성 미러) ──
+let appSettings = { offlineWritingMode: false, convWritingMode: false };
 let retrySet = new Set();  // titles that were retried-checked
 let retryMode = false;     // are we in retry-list mode?
 let retryTitles = [];      // ordered retry titles
@@ -802,10 +915,87 @@ let answerReviewCursor = 0;
       .withSuccessHandler(onDataLoaded)
       .withFailureHandler(() => onDataLoaded(getDemoData()))
       .getConversationData();
+    loadAppSettings();             // 병렬 호출: 데이터 로딩을 지연시키지 않음
   } else {
-    onDataLoaded(getDemoData());
+    onDataLoaded(getDemoData());   // 데모: appSettings 기본값 사용
   }
 })();
+
+// ═══════════════════════════════════════════════════════
+//  APP SETTINGS
+// ═══════════════════════════════════════════════════════
+function hasGas() {
+  return typeof google !== 'undefined' && google.script && google.script.run;
+}
+
+function loadAppSettings(cb) {
+  if (!hasGas()) { if (cb) cb(); return; }
+  google.script.run
+    .withSuccessHandler(res => { if (res && res.success) applySettings(res.settings); if (cb) cb(); })
+    .withFailureHandler(() => { if (cb) cb(); })   // 실패 시 기존 값 유지
+    .getAppSettings();
+}
+
+function applySettings(s) {
+  appSettings.offlineWritingMode = s.offlineWritingMode === '1';
+  appSettings.convWritingMode    = s.convWritingMode === '1';
+  syncOfflineCheckVisibility();
+}
+
+function fillSettingsForm() {
+  document.getElementById('setOffline').checked = appSettings.offlineWritingMode;
+  document.getElementById('setConv').checked    = appSettings.convWritingMode;
+}
+
+function setSettingsMsg(text, isError) {
+  const msg = document.getElementById('settingsMsg');
+  msg.textContent = text;
+  msg.classList.toggle('error', !!isError);
+}
+
+function openSettings() {
+  fillSettingsForm();
+  setSettingsMsg('', false);
+  document.getElementById('settingsModal').classList.add('show');
+  loadAppSettings(fillSettingsForm);   // 다른 사람이 바꾼 최신 값 반영
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('show');
+  setSettingsMsg('', false);
+}
+
+function saveSettings() {
+  const payload = {
+    offlineWritingMode: document.getElementById('setOffline').checked ? '1' : '0',
+    convWritingMode:    document.getElementById('setConv').checked ? '1' : '0'
+  };
+  if (!hasGas()) {   // 데모 환경: 메모리에만 반영
+    applySettings(payload);
+    closeSettings();
+    return;
+  }
+  const btn = document.getElementById('btnSaveSettings');
+  btn.disabled = true;
+  setSettingsMsg('저장 중...', false);
+  const onFail = () => {
+    btn.disabled = false;
+    setSettingsMsg('저장에 실패했습니다. 다시 시도해주세요.', true);
+  };
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res || !res.success) { onFail(); return; }
+      btn.disabled = false;
+      applySettings(res.settings);
+      closeSettings();
+    })
+    .withFailureHandler(onFail)
+    .saveAppSettings(payload);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSettings();
+});
 
 function onDataLoaded(result) {
   const data = result.success ? result.data : result;
@@ -907,12 +1097,18 @@ function updateStartBtn() {
 function syncOfflineCheckVisibility() {
   const mode = document.getElementById('modeDropdown')?.value || 'all';
   const anyChecked = [...document.querySelectorAll('#titleCheckList input[type=checkbox]')].some(cb => cb.checked);
-  const offlineWrap = document.getElementById('offlineCheckWrap');
-  if (offlineWrap) offlineWrap.classList.toggle('show', anyChecked && mode === 'filling');
-  // reset checkbox when hidden
-  if (offlineWrap && !offlineWrap.classList.contains('show')) {
-    document.getElementById('offlineCheck').checked = false;
-  }
+  const wrap = document.getElementById('offlineCheckWrap');
+  const box  = document.getElementById('modeIndicator');
+  if (!wrap || !box) return;
+
+  const items = [];
+  if (appSettings.offlineWritingMode && mode === 'filling')
+    items.push('🖊️ 오프라인 쓰기모드<small>정답 확인 없이 다음으로 진행 · 복습 생략</small>');
+  if (appSettings.convWritingMode && mode !== 'matching')
+    items.push('👤 한 화자만 보기<small>다른 화자의 대사 쓰기에서 대사를 숨깁니다</small>');
+
+  box.innerHTML = items.map(t => `<div>${t}</div>`).join('');
+  wrap.classList.toggle('show', anyChecked && items.length > 0);
 }
 
 
@@ -1008,7 +1204,9 @@ function startChapter() {
   retryMode = false;
 
   studyMode = document.getElementById("modeDropdown")?.value || "all";
-  offlineMode = studyMode === "filling" && !!(document.getElementById("offlineCheck")?.checked);
+  offlineMode = studyMode === "filling" && appSettings.offlineWritingMode;
+  convMode    = studyMode !== "matching" && appSettings.convWritingMode;
+  document.getElementById('btnSettings').style.display = 'none';
   buildCardSequence(titles);  // W 포함 전체 (buildCardSequence 내에서 자동 분기)
   cardCursor = 0;
 
@@ -1059,91 +1257,6 @@ function updateProgress() {
 // ═══════════════════════════════════════════════════════
 //  RENDER CARD DISPATCHER
 // ═══════════════════════════════════════════════════════
-function renderCard() {
-  matchSelected = null;
-  matchPairs = {};
-  passedByRetry = false;
-
-  if (cardCursor >= cardSequence.length) {
-    showReviewList();
-    return;
-  }
-
-  updateProgress();
-  const { title, phase } = cardSequence[cardCursor];
-  const dialogues = allData[currentChapter][title];
-
-  const area = document.getElementById('cardArea');
-  area.innerHTML = '';
-
-  const card = document.createElement('div');
-  card.className = 'card';
-
-  // Badge + title
-  card.innerHTML = `
-    <div class="card-badge">${currentChapter}</div>
-    <div class="card-title">${title}</div>
-    <div class="card-phase">${phaseLabel(phase)}</div>
-  `;
-
-  if (phase === 1) buildPhase1(card, dialogues);
-  else buildPhase23(card, dialogues, phase);
-
-  // Retry checkbox
-  const retryRow = document.createElement('div');
-  retryRow.className = 'retry-row';
-  retryRow.id = 'retryRow';
-  retryRow.style.display = 'none';
-  retryRow.innerHTML = `
-    <input type="checkbox" id="retryCheck">
-    <label for="retryCheck">⚠️ 다시 시도 필요 (다음으로 진행)</label>
-  `;
-  card.appendChild(retryRow);
-
-  document.getElementById('retryCheck')?.addEventListener('change', onRetryCheck);
-
-  // Nav row
-  const navRow = document.createElement('div');
-  navRow.className = 'nav-row';
-
-  const btnPrev = document.createElement('button');
-  btnPrev.className = 'btn-nav btn-prev';
-  btnPrev.textContent = '◀ 이전';
-  btnPrev.id = 'btnPrev';
-  const prevCard = cardCursor > 0 ? cardSequence[cardCursor - 1] : null;
-  // offline mode: prev always disabled
-  btnPrev.disabled = offlineMode || (cardCursor === 0) || (prevCard && prevCard._advancedByRetry);
-  btnPrev.onclick = goPrev;
-
-  const btnCheck = document.createElement('button');
-  btnCheck.className = 'btn-nav btn-check';
-  btnCheck.textContent = '정답 확인';
-  btnCheck.id = 'btnCheck';
-  if (offlineMode) {
-    btnCheck.disabled = true;
-    btnCheck.style.opacity = '0.35';
-    btnCheck.style.cursor = 'not-allowed';
-  } else {
-    btnCheck.onclick = () => checkAnswer(phase, dialogues);
-  }
-
-  const btnNext = document.createElement('button');
-  btnNext.className = 'btn-nav btn-next';
-  btnNext.textContent = cardCursor === cardSequence.length - 1 ? '완료 ✓' : '다음 ▶';
-  btnNext.id = 'btnNext';
-  btnNext.disabled = offlineMode ? false : true;
-  btnNext.onclick = goNext;
-
-  navRow.appendChild(btnPrev);
-  navRow.appendChild(btnCheck);
-  navRow.appendChild(btnNext);
-  card.appendChild(navRow);
-
-  area.appendChild(card);
-
-  if (phase === 1) initMatchListeners();
-}
-
 function phaseLabel(p) {
   const labels = { 1: '📌 순서 맞추기 (선 연결)', 2: '✏️ 한 화자의 대사 쓰기', 3: '✏️ 다른 화자의 대사 쓰기' };
   const total = studyMode === 'matching' ? 1 : studyMode === 'filling' ? 2 : 3;
@@ -1286,6 +1399,37 @@ function drawLines() {
 //  PHASE 2 / 3 : FILL-IN
 // ═══════════════════════════════════════════════════════
 function buildPhase23(card, dialogues, phase) {
+  // 한 화자만 보기: Phase 3는 대화 틀(화자 태그, 줄)만 표시, 대사는 DOM에 넣지 않음
+  if (convMode && phase === 3) {
+    const hint = document.createElement('div');
+    hint.className = 'conv-hint';
+    hint.textContent = '📝 앞에서 쓴 답을 보며 다른 화자의 대사를 종이에 적은 뒤 [다음]을 누르세요';
+    card.appendChild(hint);
+
+    const blankList = document.createElement('div');
+    blankList.className = 'dialogue-list';
+    blankList.id = 'dialogueList';
+    dialogues.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'dialogue-row';
+      const tag = document.createElement('span');
+      tag.className = `speaker-tag speaker-${d.speaker}`;
+      tag.textContent = d.speaker + ':';
+      const blank = document.createElement('div');
+      blank.className = 'dialogue-blank';
+      row.appendChild(tag);
+      row.appendChild(blank);
+      blankList.appendChild(row);
+    });
+    card.appendChild(blankList);
+
+    const fbBlank = document.createElement('div');
+    fbBlank.className = 'feedback-area';
+    fbBlank.id = 'feedbackArea';
+    card.appendChild(fbBlank);
+    return;
+  }
+
   const speakers = [...new Set(dialogues.map(d => d.speaker))];
   const isSingleSpeaker = speakers.length === 1;
 
@@ -1711,7 +1855,8 @@ function renderCard() {
     btnCheck.className = 'btn-nav btn-check';
     btnCheck.textContent = '정답 확인';
     btnCheck.id = 'btnCheck';
-    if (offlineMode) {
+    const skipCheck = offlineMode || (convMode && phase === 3);
+    if (skipCheck) {
       btnCheck.disabled = true;
       btnCheck.style.opacity = '0.35';
       btnCheck.style.cursor = 'not-allowed';
@@ -1723,7 +1868,7 @@ function renderCard() {
     btnNext.className = 'btn-nav btn-next';
     btnNext.textContent = isLast ? '완료 ✓' : '다음 ▶';
     btnNext.id = 'btnNext';
-    btnNext.disabled = offlineMode ? false : true;
+    btnNext.disabled = !skipCheck;
     btnNext.onclick = goNext;
 
     navRow.appendChild(btnPrev);
@@ -1869,6 +2014,7 @@ function resetToStart() {
   passedByRetry = false;
   studyMode = 'all';
   offlineMode = false;
+  convMode = false;   // appSettings는 유지
 
   // Answer Review 초기화
   answerReviewActive = false;
@@ -1886,8 +2032,7 @@ function resetToStart() {
 
   // Reset select screen
   document.getElementById('chapterDropdown').value = '';
-  const oc = document.getElementById('offlineCheck');
-  if (oc) oc.checked = false;
+  document.getElementById('btnSettings').style.display = '';
   hideTitleChecklist();
   document.getElementById('btnStart').disabled = true;
 
